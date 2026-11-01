@@ -1,0 +1,362 @@
+// github.com/era-lang-official/draw
+// Official 2D Geometry, Color Models, and Anti-Aliased Display List Engine for Era
+
+fn draw_str_slice(s: string, start: usize, end: usize) -> string {
+    let s_chars: Vec<char> = s.chars();
+    let mut sb = StringBuilder::new();
+    let mut i = start;
+    let limit = if end > s_chars.len() { s_chars.len() } else { end };
+    while i < limit {
+        sb.append(s_chars[i].to_string());
+        i += 1;
+    }
+    return sb.to_string();
+}
+
+fn draw_parse_hex_byte(hex: string) -> i64 {
+    let chars: Vec<char> = hex.chars();
+    let mut val: i64 = 0;
+    let mut i: usize = 0;
+    while i < chars.len() {
+        let c = chars[i];
+        let n: i64 = if c >= '0' && c <= '9' {
+            (c as i64) - ('0' as i64)
+        } else if c >= 'a' && c <= 'f' {
+            ((c as i64) - ('a' as i64)) + 10
+        } else if c >= 'A' && c <= 'F' {
+            ((c as i64) - ('A' as i64)) + 10
+        } else {
+            0
+        };
+        val = (val * 16) + n;
+        i += 1;
+    }
+    return val;
+}
+
+pub struct Point {
+    pub x: i64,
+    pub y: i64,
+}
+
+impl Point {
+    pub fn new(x: i64, y: i64) -> Point {
+        return Point { x, y };
+    }
+
+    pub fn zero() -> Point {
+        return Point { x: 0, y: 0 };
+    }
+}
+
+pub struct Size {
+    pub width: i64,
+    pub height: i64,
+}
+
+impl Size {
+    pub fn new(width: i64, height: i64) -> Size {
+        return Size { width, height };
+    }
+
+    pub fn zero() -> Size {
+        return Size { width: 0, height: 0 };
+    }
+}
+
+pub struct Rect {
+    pub x: i64,
+    pub y: i64,
+    pub width: i64,
+    pub height: i64,
+}
+
+impl Rect {
+    pub fn new(x: i64, y: i64, width: i64, height: i64) -> Rect {
+        return Rect { x, y, width, height };
+    }
+
+    pub fn from_origin_size(origin: Point, size: Size) -> Rect {
+        return Rect {
+            x: origin.x,
+            y: origin.y,
+            width: size.width,
+            height: size.height,
+        };
+    }
+
+    pub fn zero() -> Rect {
+        return Rect { x: 0, y: 0, width: 0, height: 0 };
+    }
+
+    pub fn right(&self) -> i64 {
+        return self.x + self.width;
+    }
+
+    pub fn bottom(&self) -> i64 {
+        return self.y + self.height;
+    }
+
+    pub fn contains(&self, p: Point) -> bool {
+        return p.x >= self.x && p.x <= self.right() && p.y >= self.y && p.y <= self.bottom();
+    }
+
+    pub fn intersects(&self, other: Rect) -> bool {
+        return self.x < other.right() && self.right() > other.x &&
+               self.y < other.bottom() && self.bottom() > other.y;
+    }
+
+    pub fn deflate(&self, pad: i64) -> Rect {
+        let w = if self.width > (pad * 2) { self.width - (pad * 2) } else { 0 };
+        let h = if self.height > (pad * 2) { self.height - (pad * 2) } else { 0 };
+        return Rect {
+            x: self.x + pad,
+            y: self.y + pad,
+            width: w,
+            height: h,
+        };
+    }
+}
+
+pub struct Color {
+    pub r: i64,
+    pub g: i64,
+    pub b: i64,
+    pub a: i64,
+}
+
+impl Color {
+    pub fn rgb(r: i64, g: i64, b: i64) -> Color {
+        return Color { r, g, b, a: 255 };
+    }
+
+    pub fn rgba(r: i64, g: i64, b: i64, a: i64) -> Color {
+        return Color { r, g, b, a };
+    }
+
+    pub fn from_hex(hex: string) -> Color {
+        let mut clean = hex.trim();
+        if clean.starts_with("#") {
+            clean = draw_str_slice(clean.clone(), 1, clean.len());
+        }
+        if clean.len() == 6 {
+            let r_str = draw_str_slice(clean.clone(), 0, 2);
+            let g_str = draw_str_slice(clean.clone(), 2, 4);
+            let b_str = draw_str_slice(clean.clone(), 4, 6);
+            return Color::rgb(draw_parse_hex_byte(r_str), draw_parse_hex_byte(g_str), draw_parse_hex_byte(b_str));
+        } else if clean.len() == 8 {
+            let r_str = draw_str_slice(clean.clone(), 0, 2);
+            let g_str = draw_str_slice(clean.clone(), 2, 4);
+            let b_str = draw_str_slice(clean.clone(), 4, 6);
+            let a_str = draw_str_slice(clean.clone(), 6, 8);
+            return Color::rgba(draw_parse_hex_byte(r_str), draw_parse_hex_byte(g_str), draw_parse_hex_byte(b_str), draw_parse_hex_byte(a_str));
+        }
+        return Color::rgb(0, 0, 0);
+    }
+
+    pub fn with_alpha(&self, alpha: i64) -> Color {
+        return Color { r: self.r, g: self.g, b: self.b, a: alpha };
+    }
+
+    pub fn transparent() -> Color {
+        return Color { r: 0, g: 0, b: 0, a: 0 };
+    }
+
+    pub fn white() -> Color {
+        return Color { r: 255, g: 255, b: 255, a: 255 };
+    }
+
+    pub fn black() -> Color {
+        return Color { r: 0, g: 0, b: 0, a: 255 };
+    }
+}
+
+pub struct BorderRadius {
+    pub top_left: i64,
+    pub top_right: i64,
+    pub bottom_left: i64,
+    pub bottom_right: i64,
+}
+
+impl BorderRadius {
+    pub fn all(r: i64) -> BorderRadius {
+        return BorderRadius { top_left: r, top_right: r, bottom_left: r, bottom_right: r };
+    }
+
+    pub fn zero() -> BorderRadius {
+        return BorderRadius { top_left: 0, top_right: 0, bottom_left: 0, bottom_right: 0 };
+    }
+
+    pub fn is_rounded(&self) -> bool {
+        return self.top_left > 0 || self.top_right > 0 || self.bottom_left > 0 || self.bottom_right > 0;
+    }
+}
+
+pub struct Shadow {
+    pub offset_x: i64,
+    pub offset_y: i64,
+    pub blur: i64,
+    pub color: Color,
+}
+
+impl Shadow {
+    pub fn new(offset_x: i64, offset_y: i64, blur: i64, color: Color) -> Shadow {
+        return Shadow { offset_x, offset_y, blur, color };
+    }
+
+    pub fn subtle() -> Shadow {
+        return Shadow { offset_x: 0, offset_y: 4, blur: 12, color: Color::rgba(0, 0, 0, 60) };
+    }
+
+    pub fn none() -> Shadow {
+        return Shadow { offset_x: 0, offset_y: 0, blur: 0, color: Color::transparent() };
+    }
+}
+
+pub struct DrawCommand {
+    pub kind: string, // "rect", "rounded_rect", "gradient_card", "text", "shadow", "circle", "line"
+    pub rect: Rect,
+    pub color: Color,
+    pub border_color: Color,
+    pub radius: BorderRadius,
+    pub text: string,
+    pub font_size: i64,
+    pub is_bold: bool,
+    pub blur: i64,
+    pub offset_x: i64,
+    pub offset_y: i64,
+    pub is_gradient: bool,
+    pub grad_color2: Color,
+}
+
+pub struct DisplayList {
+    pub commands: Vec<DrawCommand>,
+    pub count: usize,
+}
+
+impl DisplayList {
+    pub fn new() -> DisplayList {
+        return DisplayList {
+            commands: Vec::<DrawCommand>::new(),
+            count: 0,
+        };
+    }
+
+    pub fn draw_rect(&mut self, rect: Rect, color: Color) {
+        self.commands.push(DrawCommand {
+            kind: "rect".to_string(),
+            rect,
+            color,
+            border_color: Color::transparent(),
+            radius: BorderRadius::zero(),
+            text: "".to_string(),
+            font_size: 0,
+            is_bold: false,
+            blur: 0,
+            offset_x: 0,
+            offset_y: 0,
+            is_gradient: false,
+            grad_color2: Color::transparent(),
+        });
+        self.count += 1;
+    }
+
+    pub fn draw_rounded_rect(&mut self, rect: Rect, radius: BorderRadius, color: Color, border: Color) {
+        self.commands.push(DrawCommand {
+            kind: "rounded_rect".to_string(),
+            rect,
+            color,
+            border_color: border,
+            radius,
+            text: "".to_string(),
+            font_size: 0,
+            is_bold: false,
+            blur: 0,
+            offset_x: 0,
+            offset_y: 0,
+            is_gradient: false,
+            grad_color2: Color::transparent(),
+        });
+        self.count += 1;
+    }
+
+    pub fn draw_gradient_card(&mut self, rect: Rect, radius: BorderRadius, c1: Color, c2: Color, border: Color) {
+        self.commands.push(DrawCommand {
+            kind: "gradient_card".to_string(),
+            rect,
+            color: c1,
+            border_color: border,
+            radius,
+            text: "".to_string(),
+            font_size: 0,
+            is_bold: false,
+            blur: 0,
+            offset_x: 0,
+            offset_y: 0,
+            is_gradient: true,
+            grad_color2: c2,
+        });
+        self.count += 1;
+    }
+
+    pub fn draw_text(&mut self, text: string, pos: Point, font_size: i64, color: Color, is_bold: bool) {
+        self.commands.push(DrawCommand {
+            kind: "text".to_string(),
+            rect: Rect::new(pos.x, pos.y, 0, font_size),
+            color,
+            border_color: Color::transparent(),
+            radius: BorderRadius::zero(),
+            text,
+            font_size,
+            is_bold,
+            blur: 0,
+            offset_x: 0,
+            offset_y: 0,
+            is_gradient: false,
+            grad_color2: Color::transparent(),
+        });
+        self.count += 1;
+    }
+
+    pub fn draw_shadow(&mut self, rect: Rect, radius: BorderRadius, shadow: Shadow) {
+        self.commands.push(DrawCommand {
+            kind: "shadow".to_string(),
+            rect,
+            color: shadow.color,
+            border_color: Color::transparent(),
+            radius,
+            text: "".to_string(),
+            font_size: 0,
+            is_bold: false,
+            blur: shadow.blur,
+            offset_x: shadow.offset_x,
+            offset_y: shadow.offset_y,
+            is_gradient: false,
+            grad_color2: Color::transparent(),
+        });
+        self.count += 1;
+    }
+
+    pub fn draw_circle(&mut self, cx: i64, cy: i64, radius: i64, color: Color) {
+        self.commands.push(DrawCommand {
+            kind: "circle".to_string(),
+            rect: Rect::new(cx, cy, radius, radius),
+            color,
+            border_color: Color::transparent(),
+            radius: BorderRadius::zero(),
+            text: "".to_string(),
+            font_size: 0,
+            is_bold: false,
+            blur: 0,
+            offset_x: 0,
+            offset_y: 0,
+            is_gradient: false,
+            grad_color2: Color::transparent(),
+        });
+        self.count += 1;
+    }
+
+    pub fn len(&self) -> usize {
+        return self.count;
+    }
+}
